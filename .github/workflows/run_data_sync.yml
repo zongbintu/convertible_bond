@@ -1,0 +1,49 @@
+name: Run Data Sync
+
+on:
+  workflow_dispatch: 
+  schedule:
+    - cron: '0 0 * * *'
+  push:
+    branches:
+      - master
+    paths:
+      - convertible_bond.py
+      - requirements.txt
+
+env:
+  GITHUB_NAME: ZongbinTu # change to yours
+  GITHUB_EMAIL: enum@foxmail.com # change to yours
+
+jobs:
+  sync:
+    name: Sync
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        id: setup_python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: pip
+          cache-dependency-path: 'requirements.txt'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run sync script
+        run: |
+          python convertible_bond.py ${{ secrets.JISILU_COOKIE }}
+
+      - name: Push outputs
+        run: |
+          git config --local user.email "${{ env.GITHUB_EMAIL }}"
+          git config --local user.name "${{ env.GITHUB_NAME }}"
+          git add .
+          git commit -m 'update outputs' || echo "nothing to commit"
+          git push || echo "nothing to push"
