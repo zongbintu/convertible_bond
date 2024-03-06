@@ -110,7 +110,7 @@ def detail(cookie, code):
         return Yield_to_Maturity_After_Taxes(data)
     else:
         print("Error:", response.status_code)
-    return -999
+    return '-999%'
 
 
 def Yield_to_Maturity_After_Taxes(content):
@@ -157,7 +157,7 @@ def Yield_to_Maturity_After_Taxes(content):
         return result
     else:
         print("未找到匹配到期税后收益率,返回值为-999")
-    return -999
+    return '-999%'
 
 
 def main(cookie):
