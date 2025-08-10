@@ -33,8 +33,18 @@ def list_cb():
             # 移除指定的键
             parsed_json.pop("icons", None)
 
-            put_ytm = detail(item["bond_id"])
-            item["put_ytm"] = put_ytm
+            detail_data = detail(item["bond_id"])
+            item["industry"] = detail_data.get('industry', '')
+
+            item["province"] = detail_data.get('province', '')
+            item["issue_dt"] = detail_data.get('issue_dt', '')
+            item["list_dt"] = detail_data.get('list_dt', '')
+            item["convert_dt"] = detail_data.get('convert_dt', '')
+            item["next_put_dt"] = detail_data.get('next_put_dt', '')
+            item["last_trade_dt"] = detail_data.get('last_trade_dt', '')
+            item["last_convert_dt"] = detail_data.get('last_convert_dt', '')
+
+            item["put_ytm"] = detail_data.get('after_tax_yield','-99999%')
 
             # 将 put_ytm 插入到字典的最前面
             item_keys = list(item.keys())
@@ -65,7 +75,9 @@ def write_to_excel(data):
         ,"正股代码","正股名称","正股价","正股涨跌","正股PB","转股价","转股价值","转股溢价率","双低","纯债价值"
         , "评级","期权价值","正股波动率","回售触发价","强赎触发价","转债流通市价比","基金持仓"
         , "到期时间", "剩余年限/年","剩余规模（亿元）","成交额（万元）","换手率","到期税前收益率","回售收益"
-        ,"到期税后收益率"]
+        ,"到期税后收益率"
+              ,"行业","地域","起息日","上市日","转股起始日","回售起算日","最后交易日","最后转股日"
+              ]
     ws.append(header)
 
     # 将数据写入工作表
@@ -76,6 +88,7 @@ def write_to_excel(data):
             , item["rating_cd"],"","",item["put_convert_price"],item["force_redeem_price"],str(item["convert_amt_ratio"])+'%',""
                 , item["maturity_dt"], str(item["year_left"]),item["curr_iss_amt"],item["volume"],str(item["turnover_rt"])+'%',str(item["ytm_rt"])+'%',item["put_ytm_rt"]
                 ,item["put_ytm"]
+              ,item["industry"],item["province"],item["issue_dt"],item["list_dt"] ,item["convert_dt"],item["next_put_dt"] ,item["last_trade_dt"],item["last_convert_dt"]
         ])
 
     # 保存工作簿
@@ -105,59 +118,67 @@ def detail(code):
     response = jslSession.get(url, headers=headers)
 
     if response.status_code == 200:
-        data = response.text
+        content = response.text
         # 处理数据
-        return Yield_to_Maturity_After_Taxes(data)
+        # 使用 lxml 解析 HTML
+        tree = html.fromstring(content)
+
+        code = tree.xpath('//*[@id="tc_data"]/div/div[1]/table[1]/tr/td/div/div[1]/text()')[1]
+
+        name = tree.xpath('//*[@id="tc_data"]/div/div[1]/table[1]/tr/td/div/div[1]/span')
+
+        detail_data = {}
+
+        # 如果找到了元素
+        if name:
+            # 获取元素的HTML内容
+            element_html = html.tostring(name[0], pretty_print=True, encoding='unicode')
+            print(element_html)
+            # 获取子字符串 "123044" 在字符串中的位置
+            index = element_html.find(code)
+
+            # 如果找到了子字符串
+            if index != -1:
+                # 截取从字符串开头到子字符串位置的部分
+                span = element_html[:index].strip()
+                # <span class="font_18">红相转债</span>
+                tree_span = html.fromstring(span)
+
+                name = tree_span.xpath('text()')[0]
+            else:
+                print("未找到子字符串")
+
+        # 使用 XPath 表达式定位到特定的元素
+        value = tree.xpath('//*[@id="tc_data"]/div/div[1]/table[1]/tr[3]/td[3]/text()')[0]
+        # 输出获取到的值
+        print(code, name, value)
+
+        # 使用正则表达式匹配模式
+        pattern = r'-?\d+\.\d+%'  # 匹配一个可选的负号，后面跟着一个或多个数字，然后是一个小数点，接着是一个或多个数字，最后是一个百分号
+        match = re.search(pattern, value)
+
+        # 如果找到了匹配项
+        if match:
+            result = match.group()  # 获取匹配到的字符串
+            print(f'计算到期税后收益率返回值:{result}')
+            detail_data['after_tax_yield'] = result
+        else:
+            print("未找到匹配到期税后收益率")
+
+        industry_new = tree.xpath('//*[@id="industry_new"]')[0].text
+        detail_data['industry'] = industry_new
+        detail_data['province'] = tree.xpath('//*[@id="province"]')[0].text
+        detail_data['issue_dt'] = tree.xpath('//*[@id="issue_dt"]')[0].text
+        detail_data['list_dt'] = tree.xpath('//*[@id="list_dt"]')[0].text
+        detail_data['convert_dt'] = tree.xpath('//*[@id="convert_dt"]')[0].text
+        detail_data['next_put_dt'] = tree.xpath('//*[@id="next_put_dt"]')[0].text
+        detail_data['last_trade_dt'] = tree.xpath('//*[@id="next_put_dt"]')[1].text
+        detail_data['last_convert_dt'] = tree.xpath('//*[@id="convert_dt"]')[1].text
+
+        return detail_data
     else:
         print("Error:", response.status_code)
-    return '-999%'
-
-
-def Yield_to_Maturity_After_Taxes(content):
-
-    # 使用 lxml 解析 HTML
-    tree = html.fromstring(content)
-
-    code = tree.xpath('//*[@id="tc_data"]/div/div[1]/table[1]/tr/td/div/div[1]/text()')[1]
-
-    name = tree.xpath('//*[@id="tc_data"]/div/div[1]/table[1]/tr/td/div/div[1]/span')
-
-    # 如果找到了元素
-    if name:
-        # 获取元素的HTML内容
-        element_html = html.tostring(name[0], pretty_print=True, encoding='unicode')
-        print(element_html)
-        # 获取子字符串 "123044" 在字符串中的位置
-        index = element_html.find(code)
-
-        # 如果找到了子字符串
-        if index != -1:
-            # 截取从字符串开头到子字符串位置的部分
-            span = element_html[:index].strip()
-            # <span class="font_18">红相转债</span>
-            tree_span = html.fromstring(span)
-
-            name = tree_span.xpath('text()')[0]
-        else:
-            print("未找到子字符串")
-
-    # 使用 XPath 表达式定位到特定的元素
-    value = tree.xpath('//*[@id="tc_data"]/div/div[1]/table[1]/tr[3]/td[3]/text()')[0]
-    # 输出获取到的值
-    print(code, name, value)
-
-    # 使用正则表达式匹配模式
-    pattern = r'-?\d+\.\d+%'  # 匹配一个可选的负号，后面跟着一个或多个数字，然后是一个小数点，接着是一个或多个数字，最后是一个百分号
-    match = re.search(pattern, value)
-
-    # 如果找到了匹配项
-    if match:
-        result = match.group()  # 获取匹配到的字符串
-        print(f'计算到期税后收益率返回值:{result}')
-        return result
-    else:
-        print("未找到匹配到期税后收益率,返回值为-999")
-    return '-999%'
+    return {}
 
 
 def main(username, pwd):
