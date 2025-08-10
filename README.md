@@ -8,5 +8,5 @@
 只需要隔一段时间跑一下可转债的到期税后收益率排序取6%以上的可转债摊大饼即可
 
 ## How to use
-fork，并配置JISILU_COOKIE
+fork，并配置JISILU_USERNAME和JISILU_PWD
 每天自动运行

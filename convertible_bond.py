@@ -1,12 +1,13 @@
 import argparse
-import requests
-import json
-import openpyxl
-from lxml import html
 import re
 
+import openpyxl
+import requests
+from lxml import html
 
-def list_cb(cookie):
+jslSession = requests.session()
+
+def list_cb():
     url = "https://www.jisilu.cn/webapi/cb/list/"
 
     headers = {
@@ -14,30 +15,25 @@ def list_cb(cookie):
         # 设置 User-Agent
         "Columns": "1,70,2,3,5,6,11,12,14,15,16,29,30,32,34,44,46,47,50,52,53,54,56,57,58,59,60,62,63,67",
         "Init": "1",
+        "Accept": "application/json"
     }
 
-    cookies = {
-        "Cookie": cookie,
-        # 设置 Cookie
-    }
-
-    response = requests.get(url, headers=headers, cookies=cookies)
+    response = jslSession.get(url, headers=headers)
 
     if response.status_code == 200:
-        data = response.text
         # 处理数据
-        # 解析 JSON 字符串
-        parsed_json = json.loads(data)
+        parsed_json = response.json()
 
         # 获取数据中的bond_id值
         data_list = parsed_json["data"]
         print('code:', parsed_json["code"], 'msg:', parsed_json["msg"], 'data size:', len(data_list))
+        data_list = list(filter(lambda x:not x["bond_nm"].endswith("退债"), data_list))
 
         for item in data_list:
             # 移除指定的键
             parsed_json.pop("icons", None)
 
-            put_ytm = detail(cookie, item["bond_id"])
+            put_ytm = detail(item["bond_id"])
             item["put_ytm"] = put_ytm
 
             # 将 put_ytm 插入到字典的最前面
@@ -65,13 +61,22 @@ def write_to_excel(data):
     ws = wb.active
 
     # 写入表头
-    header = ["到期税后收益率", "代码", "转债名称", "现价", "评级", "到期时间", "剩余年限/年", "涨跌幅"]
+    header = ["代码", "转债名称", "现价", "涨跌幅"
+        ,"正股代码","正股名称","正股价","正股涨跌","正股PB","转股价","转股价值","转股溢价率","双低","纯债价值"
+        , "评级","期权价值","正股波动率","回售触发价","强赎触发价","转债流通市价比","基金持仓"
+        , "到期时间", "剩余年限/年","剩余规模（亿元）","成交额（万元）","换手率","到期税前收益率","回售收益"
+        ,"到期税后收益率"]
     ws.append(header)
 
     # 将数据写入工作表
     for item in data:
         ws.append(
-            [item["put_ytm"], item["bond_id"], item["bond_nm"], item["price"], item["rating_cd"], item["maturity_dt"], str(item["year_left"]), str(item["increase_rt"]) + '%'])
+            [ item["bond_id"], item["bond_nm"], item["price"], str(item["increase_rt"]) + '%'
+            ,item["stock_id"], item["stock_nm"],item["sprice"],str(item["sincrease_rt"])+'%',item["pb"],item["convert_price"],item["convert_value"],str(item["premium_rt"])+'%',item["dblow"],""
+            , item["rating_cd"],"","",item["put_convert_price"],item["force_redeem_price"],str(item["convert_amt_ratio"])+'%',""
+                , item["maturity_dt"], str(item["year_left"]),item["curr_iss_amt"],item["volume"],str(item["turnover_rt"])+'%',str(item["ytm_rt"])+'%',item["put_ytm_rt"]
+                ,item["put_ytm"]
+        ])
 
     # 保存工作簿
     wb.save("output.xlsx")
@@ -89,7 +94,7 @@ def write_to_txt(data):
             file.write("\t".join(values_as_strings) + "\n")
 
 
-def detail(cookie, code):
+def detail(code):
     url = "https://www.jisilu.cn/data/convert_bond_detail/" + code
 
     headers = {
@@ -97,12 +102,7 @@ def detail(cookie, code):
         # 设置 User-Agent
     }
 
-    cookies = {
-        "Cookie": cookie,
-        # 设置 Cookie
-    }
-
-    response = requests.get(url, headers=headers, cookies=cookies)
+    response = jslSession.get(url, headers=headers)
 
     if response.status_code == 200:
         data = response.text
@@ -160,13 +160,36 @@ def Yield_to_Maturity_After_Taxes(content):
     return '-999%'
 
 
-def main(cookie):
-    list_cb(cookie)
+def main(username, pwd):
+    login(username, pwd)
+    list_cb()
 
+def login(username, pwd):
+    url = "https://www.jisilu.cn/webapi/account/login_process/"
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        # 设置 User-Agent
+        "Accept": "application/json, text/javascript, */*; q=0.01"
+
+    }
+    data = {'return_url': 'https://www.jisilu.cn/'
+        , 'user_name': 'a6d20b3f32f44deca57827d282248f38'
+            ,'password':'6362de61f78f65935b8a594295ff73cb'
+            ,'aes':1
+            ,'auto_login':0
+            }
+    response = jslSession.post(url,data=data, headers=headers)
+
+    if response.status_code == 200:
+        print("login success")
+    else:
+        print("login failed.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("cookie", help="jisilu cookie")
+    parser.add_argument("username", help="jisilu encode username")
+    parser.add_argument("pwd", help="jisilu encode password")
 
     options = parser.parse_args()
-    main(options.cookie)
+    main(options.username, options.pwd)

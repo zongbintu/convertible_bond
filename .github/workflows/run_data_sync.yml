@@ -38,7 +38,7 @@ jobs:
 
       - name: Run sync script
         run: |
-          python convertible_bond.py ${{ secrets.JISILU_COOKIE }}
+          python convertible_bond.py ${{ secrets.JISILU_USERNAME }}  ${{ secrets.JISILU_PWD }}
 
       - name: Push outputs
         run: |
